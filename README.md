@@ -47,7 +47,7 @@ Notes:
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
   classDef edge fill:#eef7ff,stroke:#2f6b8a,stroke-width:1px,color:#0b2b40;
   classDef compute fill:#e8fff1,stroke:#1f7a4f,stroke-width:1px,color:#0f3d2a;
   classDef store fill:#fff6e8,stroke:#a86a1f,stroke-width:1px,color:#4a2f10;
@@ -83,14 +83,7 @@ flowchart LR
     G[Grafana Dashboards\nAPI Polling]:::obs
     A --> G
   end
-
-  click B "src/pipeline/run.py" "Open Beam pipeline entrypoint"
-  click A "src/api/app.py" "Open FastAPI app"
-  click C "src/agents/investigator.py" "Open CrewAI investigator"
-  click F "src/api/routes/anomalies.py" "Open anomalies API route"
 ```
-
-Tip: If your Markdown viewer supports Mermaid click actions, click the nodes to jump to key files.
 
 ## API Endpoints
 

@@ -46,43 +46,80 @@ Notes:
 
 ## Architecture
 
+### System Overview
+
 ```mermaid
 flowchart TB
-  classDef edge fill:#eef7ff,stroke:#2f6b8a,stroke-width:1px,color:#0b2b40;
-  classDef compute fill:#e8fff1,stroke:#1f7a4f,stroke-width:1px,color:#0f3d2a;
-  classDef store fill:#fff6e8,stroke:#a86a1f,stroke-width:1px,color:#4a2f10;
-  classDef obs fill:#f4efff,stroke:#6443a8,stroke-width:1px,color:#2f1b5f;
+  classDef source fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+  classDef stream fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#bf360c
+  classDef process fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+  classDef ml fill:#fce4ec,stroke:#c62828,stroke-width:2px,color:#b71c1c
+  classDef api fill:#e0f2f1,stroke:#00695c,stroke-width:2px,color:#004d40
+  classDef store fill:#fff8e1,stroke:#f9a825,stroke-width:2px,color:#f57f17
+  classDef dash fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c
 
-  subgraph Ingestion
-    S[Sensors / Simulator]:::edge
-    T1[Input Topic\nPub/Sub or Kafka Equivalent]:::edge
-    S --> T1
-  end
+  S["🏭 IoT Sensors / Simulator\n(scripts/simulator.py)"]:::source
 
-  subgraph Streaming
-    B[Apache Beam Pipeline\nDataflow Runner]:::compute
-    V[ML Online Endpoint\nIsolation Forest]:::compute
-    T2[Anomaly Topic\nPub/Sub or Kafka Equivalent]:::edge
-    T1 --> B
-    B --> V
-    V --> T2
-  end
+  T1["📨 Telemetry Topic\n(Pub/Sub · Kafka equivalent)"]:::stream
 
-  subgraph API_and_AI
-    A[FastAPI Service\nCloud Run]:::compute
-    C[CrewAI Investigator]:::compute
-    Q[History Store\nBigQuery]:::store
-    F[Incident Reports\nFirestore]:::store
-    T2 --> A
-    A --> C
-    C --> Q
-    C --> F
-  end
+  BP["⚙️ Apache Beam Pipeline\n(Dataflow · Flink/Spark equivalent)\nSliding window → group by sensor"]:::process
 
-  subgraph Observability
-    G[Grafana Dashboards\nAPI Polling]:::obs
-    A --> G
-  end
+  ML["🤖 Isolation Forest Endpoint\n(Vertex AI · SageMaker/KServe equivalent)"]:::ml
+
+  T2["🚨 Anomaly Topic\n(Pub/Sub · Kafka equivalent)"]:::stream
+
+  API["🌐 FastAPI Service\n(Cloud Run · Fargate/App Runner equivalent)"]:::api
+
+  CREW["🕵️ CrewAI Investigator\n(Gemini LLM · any LLM via adapters)"]:::api
+
+  BQ["📊 BigQuery\n(Snowflake/Redshift equivalent)\nSensor history for investigation"]:::store
+
+  FS["📝 Firestore\n(MongoDB/DynamoDB equivalent)\nAI diagnostic reports"]:::store
+
+  GF["📈 Grafana Cloud\nStat · Trend · Table panels"]:::dash
+
+  S -- "raw telemetry JSON" --> T1
+  T1 -- "windowed sensor groups" --> BP
+  BP -- "feature vectors" --> ML
+  ML -- "anomaly score = −1" --> T2
+  T2 -- "push subscription" --> API
+  API -- "background task" --> CREW
+  CREW -- "SQL: last 5 readings" --> BQ
+  CREW -- "write diagnostic report" --> FS
+  API -- "GET /api/*" --> GF
+```
+
+### Request Lifecycle
+
+```mermaid
+sequenceDiagram
+  participant S as Sensor
+  participant PS as Pub/Sub Topic
+  participant BM as Beam Pipeline
+  participant VX as ML Endpoint
+  participant AT as Anomaly Topic
+  participant FA as FastAPI
+  participant CR as CrewAI Agent
+  participant BQ as BigQuery
+  participant FS as Firestore
+  participant GR as Grafana
+
+  S->>PS: publish telemetry
+  PS->>BM: deliver to sliding window
+  BM->>VX: predict(features)
+  VX-->>BM: anomaly_score
+  BM->>AT: publish if score = −1
+  AT->>FA: push subscription POST
+  FA->>FA: queue background task
+  FA-->>AT: 200 OK
+  FA->>CR: investigate(anomaly)
+  CR->>BQ: fetch sensor history
+  BQ-->>CR: last 5 readings
+  CR->>FS: save AI report
+  GR->>FA: poll /api/anomalies
+  FA->>FS: query reports
+  FS-->>FA: results
+  FA-->>GR: JSON response
 ```
 
 ## API Endpoints

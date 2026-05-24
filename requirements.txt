@@ -1,0 +1,24 @@
+# ── API server ───────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+
+# ── GCP ──────────────────────────────────────────────────────────────────────
+google-cloud-bigquery
+google-cloud-firestore
+google-cloud-pubsub
+google-cloud-aiplatform
+google-cloud-storage>=3.0.0
+db-dtypes
+
+# ── ML (must match Vertex AI serving image: sklearn-cpu.1-5) ─────────────────
+scikit-learn==1.5.2
+pandas
+joblib
+
+# ── AI agent ─────────────────────────────────────────────────────────────────
+crewai
+litellm
+langchain-google-vertexai
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv

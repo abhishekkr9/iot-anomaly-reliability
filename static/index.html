@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI IoT Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ── Animations ─────────────────────────────────── */
+        @keyframes live-pulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(6,182,212,.5); opacity:1; }
+            50%      { box-shadow: 0 0 0 8px rgba(6,182,212,0); opacity:.6; }
+        }
+        @keyframes badge-pop {
+            0%   { transform: scale(1); }
+            40%  { transform: scale(1.5); }
+            70%  { transform: scale(.9); }
+            100% { transform: scale(1); }
+        }
+        @keyframes card-enter {
+            from { opacity:0; transform:translateY(18px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+        @keyframes report-enter {
+            from { opacity:0; transform:translateX(-12px); }
+            to   { opacity:1; transform:translateX(0); }
+        }
+        @keyframes dot-blink {
+            0%,100% { opacity:1; transform:scale(1); }
+            50%     { opacity:.4; transform:scale(1.6); }
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes fade-in { from{opacity:0} to{opacity:1} }
+
+        .animate-live-pulse { border-radius:50%; animation:live-pulse 2s ease-in-out infinite; }
+        .animate-badge-pop  { animation:badge-pop .35s cubic-bezier(.36,.07,.19,.97) both; }
+        .animate-dot-blink  { animation:dot-blink 2s ease-in-out infinite; }
+        .animate-spin-feed  { animation:spin 1.2s linear infinite; }
+        .animate-fade-in    { animation:fade-in .3s ease-out both; }
+        .card-s1 { animation:card-enter .45s ease-out .05s both; }
+        .card-s2 { animation:card-enter .45s ease-out .15s both; }
+        .card-s3 { animation:card-enter .45s ease-out .25s both; }
+        .report-enter { animation:report-enter .35s ease-out both; }
+
+        /* Reduced-motion: keep colour cues, kill transforms */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration:.01ms !important;
+                animation-iteration-count:1 !important;
+                transition-duration:.01ms !important;
+            }
+        }
+
+        /* Feed scrollbar */
+        #reports-container::-webkit-scrollbar { width:4px; }
+        #reports-container::-webkit-scrollbar-thumb { background:#475569; border-radius:2px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen font-sans">
+
+<!-- ══════════════════════════════════════════════════════
+     HERO — factory schematic infographic + live KPIs
+     Nano Banana prompt (hero):
+       "isometric industrial factory floor, three sensor zones,
+        electric motor, roller bearing, exhaust stack,
+        wiring and data pipelines, amber + cyan + red accent lights,
+        dark steel background, no text, vector infographic style"
+     To swap in your Nano Banana export:
+       <img src="assets/images/hero-factory.webp"
+            alt="Factory sensor zone schematic" loading="lazy"
+            class="w-full rounded-xl">
+═══════════════════════════════════════════════════════════ -->
+<header class="relative border-b border-slate-800 overflow-hidden">
+    <!-- subtle grid overlay -->
+    <div class="absolute inset-0 opacity-[.04]"
+         style="background:repeating-linear-gradient(0deg,#06b6d4 0,#06b6d4 1px,transparent 1px,transparent 40px),
+                          repeating-linear-gradient(90deg,#06b6d4 0,#06b6d4 1px,transparent 1px,transparent 40px)">
+    </div>
+
+    <div class="relative max-w-6xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
+        <!-- title + status row -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-6 sm:mb-8">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="animate-live-pulse inline-block w-2.5 h-2.5 bg-cyan-400"></span>
+                    <span class="text-cyan-400 text-xs font-mono uppercase tracking-widest">Live · 5s polling</span>
+                </div>
+                <h1 class="text-2xl sm:text-4xl font-black tracking-tight leading-none">
+                    IoT AI <span class="text-amber-400">Reliability</span> Dashboard
+                </h1>
+                <p class="text-slate-400 text-xs sm:text-sm mt-2 font-mono">Vertex ML · CrewAI Diagnostics · Real-time Anomaly Detection</p>
+            </div>
+
+            <!-- KPI chips -->
+            <div class="flex flex-wrap gap-2 shrink-0">
+                <div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 text-center min-w-[78px]">
+                    <div id="kpi-total" class="text-xl sm:text-3xl font-black text-red-400 tabular-nums">—</div>
+                    <div class="text-slate-500 text-xs mt-1 uppercase tracking-wide">Anomalies</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 text-center min-w-[78px]">
+                    <div class="text-xl sm:text-3xl font-black text-cyan-400">3</div>
+                    <div class="text-slate-500 text-xs mt-1 uppercase tracking-wide">Sensors</div>
+                </div>
+                <div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 text-center min-w-[78px]">
+                    <div id="kpi-time" class="text-xl sm:text-3xl font-black text-amber-400 tabular-nums">—</div>
+                    <div class="text-slate-500 text-xs mt-1 uppercase tracking-wide">Updated</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hero SVG infographic: factory floor schematic with 3 sensor zones -->
+        <!-- Hidden on very small screens where SVG labels become illegible -->
+        <svg viewBox="0 0 960 170" class="hidden sm:block w-full" role="img"
+             aria-label="Factory sensor zone schematic: Zone A motor, Zone B bearing, Zone C exhaust, linked by data pipeline to AI model">
+            <!-- pipeline backbone -->
+            <line x1="90" y1="85" x2="870" y2="85" stroke="#1e293b" stroke-width="4"/>
+            <line x1="90" y1="85" x2="870" y2="85" stroke="#334155" stroke-width="2" stroke-dasharray="10 5"/>
+
+            <!-- flow arrows -->
+            <polygon points="275,78 292,85 275,92" fill="#475569"/>
+            <polygon points="545,78 562,85 545,92" fill="#475569"/>
+            <polygon points="760,78 777,85 760,92" fill="#475569"/>
+
+            <!-- ── ZONE A · Motor (amber) ── -->
+            <g transform="translate(52,28)">
+                <text x="44" y="-5" text-anchor="middle" fill="#f59e0b" font-size="10" font-family="monospace" font-weight="700" letter-spacing="2">ZONE A</text>
+                <rect x="0" y="12" width="88" height="60" rx="6" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+                <rect x="88" y="26" width="16" height="32" rx="3" fill="#1e293b" stroke="#f59e0b"/>
+                <line x1="14" y1="28" x2="14" y2="56" stroke="#f59e0b" stroke-width="2.5" opacity=".85"/>
+                <line x1="24" y1="22" x2="24" y2="62" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                <line x1="34" y1="28" x2="34" y2="56" stroke="#f59e0b" stroke-width="2.5" opacity=".85"/>
+                <line x1="44" y1="22" x2="44" y2="62" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                <line x1="54" y1="28" x2="54" y2="56" stroke="#f59e0b" stroke-width="2.5" opacity=".85"/>
+                <line x1="64" y1="22" x2="64" y2="62" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                <line x1="74" y1="28" x2="74" y2="56" stroke="#f59e0b" stroke-width="2.5" opacity=".85"/>
+                <path d="M16,12 Q20,3 24,12" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".6"/>
+                <path d="M36,12 Q40,1 44,12" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".4"/>
+                <path d="M56,12 Q60,3 64,12" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".6"/>
+                <text x="44" y="88" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="monospace">Motor Temp</text>
+            </g>
+
+            <!-- ── ZONE B · Bearing (cyan) ── -->
+            <g transform="translate(396,20)">
+                <text x="48" y="-5" text-anchor="middle" fill="#06b6d4" font-size="10" font-family="monospace" font-weight="700" letter-spacing="2">ZONE B</text>
+                <circle cx="48" cy="50" r="42" fill="none" stroke="#0e7490" stroke-width="1" stroke-dasharray="4 6" opacity=".5"/>
+                <circle cx="48" cy="50" r="34" fill="#0f172a" stroke="#06b6d4" stroke-width="1.5"/>
+                <circle cx="48" cy="50" r="22" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".5"/>
+                <circle cx="48" cy="50" r="8"  fill="#06b6d4" opacity=".25"/>
+                <circle cx="48" cy="50" r="4"  fill="#06b6d4"/>
+                <circle cx="48" cy="17" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                <circle cx="48" cy="83" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                <circle cx="15" cy="50" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                <circle cx="81" cy="50" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                <circle cx="24" cy="23" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                <circle cx="72" cy="23" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                <circle cx="24" cy="77" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                <circle cx="72" cy="77" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                <text x="48" y="94" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="monospace">Bearing Temp</text>
+            </g>
+
+            <!-- ── ZONE C · Exhaust (orange-red) ── -->
+            <g transform="translate(688,14)">
+                <text x="44" y="-1" text-anchor="middle" fill="#f97316" font-size="10" font-family="monospace" font-weight="700" letter-spacing="2">ZONE C</text>
+                <rect x="28" y="48" width="28" height="72" rx="4" fill="#0f172a" stroke="#f97316" stroke-width="1.5"/>
+                <rect x="16" y="58" width="52" height="14" rx="3" fill="#1e293b" stroke="#f97316"/>
+                <rect x="32" y="54" width="7" height="44" rx="2" fill="#f97316" opacity=".2"/>
+                <rect x="32" y="72" width="7" height="26" rx="2" fill="#f97316" opacity=".75"/>
+                <circle cx="42" cy="38" r="10" fill="#f97316" opacity=".1"/>
+                <circle cx="34" cy="26" r="8"  fill="#f97316" opacity=".08"/>
+                <circle cx="52" cy="20" r="7"  fill="#f97316" opacity=".06"/>
+                <path d="M36,48 Q40,40 44,48" stroke="#f97316" stroke-width="1.5" fill="none" opacity=".6"/>
+                <path d="M44,38 Q48,30 52,38" stroke="#f97316" stroke-width="1.5" fill="none" opacity=".4"/>
+                <circle cx="64" cy="72" r="8" fill="none" stroke="#f97316" stroke-width="1.5"/>
+                <line x1="64" y1="65" x2="64" y2="72" stroke="#f97316" stroke-width="1.5"/>
+                <line x1="64" y1="72" x2="69" y2="76" stroke="#f97316" stroke-width="1.5"/>
+                <text x="44" y="108" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="monospace">Exhaust Temp</text>
+            </g>
+
+            <!-- AI node -->
+            <g transform="translate(842,56)">
+                <circle cx="24" cy="24" r="22" fill="#0f172a" stroke="#818cf8" stroke-width="1.5"/>
+                <circle cx="24" cy="24" r="28" fill="none" stroke="#818cf8" stroke-width=".5" stroke-dasharray="3 5" opacity=".5"/>
+                <text x="24" y="20" text-anchor="middle" fill="#818cf8" font-size="9"  font-family="monospace" font-weight="700">AI</text>
+                <text x="24" y="32" text-anchor="middle" fill="#818cf8" font-size="7.5" font-family="monospace">MODEL</text>
+            </g>
+        </svg>
+    </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════
+     MAIN CONTENT
+═══════════════════════════════════════════════════════════ -->
+<main class="max-w-6xl mx-auto px-4 py-6 sm:px-8 sm:py-8">
+
+    <!-- Sensor cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" role="list" aria-label="Sensor status cards">
+
+        <!--
+            Nano Banana prompt (SENSOR_1):
+              "industrial electric motor cross-section infographic,
+               amber glow heat map overlay, dark steel background,
+               no text labels, bold flat vector style"
+            To swap in your export:
+              <img src="assets/images/sensor-1-motor.webp" alt="" loading="lazy"
+                   class="w-full h-24 object-cover rounded-lg">
+        -->
+        <article id="card-SENSOR_1"
+            onclick="filterSensor('SENSOR_1')"
+            onkeydown="if(event.key==='Enter'||event.key===' ')filterSensor('SENSOR_1')"
+            tabindex="0" role="listitem"
+            aria-label="SENSOR_1, Zone A Motor Temperature – click to filter"
+            class="card-s1 cursor-pointer bg-slate-900 rounded-2xl border border-slate-700
+                   hover:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500
+                   transition-all duration-200 shadow-xl overflow-hidden group">
+            <div class="h-1 bg-gradient-to-r from-amber-500 to-yellow-300"></div>
+            <div class="p-5">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span id="dot-SENSOR_1" class="animate-dot-blink w-2 h-2 rounded-full bg-green-400"></span>
+                            <span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Zone A</span>
+                        </div>
+                        <h2 class="text-lg font-black font-mono text-white">SENSOR_1</h2>
+                        <p class="text-amber-400/80 text-xs mt-0.5">Motor Temperature</p>
+                    </div>
+                    <div id="badge-SENSOR_1" hidden
+                         class="bg-red-500 text-white font-black rounded-full h-8 w-8 flex items-center justify-center text-xs"
+                         aria-live="polite" aria-label="anomaly count">0</div>
+                </div>
+                <!-- Nano Banana SVG fallback · Motor -->
+                <div class="flex justify-center py-1 opacity-75 group-hover:opacity-100 transition-opacity">
+                    <svg viewBox="0 0 100 72" width="100" height="72" aria-hidden="true">
+                        <rect x="2" y="14" width="82" height="54" rx="6" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+                        <rect x="84" y="27" width="14" height="28" rx="3" fill="#1e293b" stroke="#f59e0b"/>
+                        <line x1="15" y1="28" x2="15" y2="54" stroke="#f59e0b" stroke-width="2.5" opacity=".9"/>
+                        <line x1="25" y1="22" x2="25" y2="60" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                        <line x1="35" y1="28" x2="35" y2="54" stroke="#f59e0b" stroke-width="2.5" opacity=".9"/>
+                        <line x1="45" y1="22" x2="45" y2="60" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                        <line x1="55" y1="28" x2="55" y2="54" stroke="#f59e0b" stroke-width="2.5" opacity=".9"/>
+                        <line x1="65" y1="22" x2="65" y2="60" stroke="#f59e0b" stroke-width="2.5" opacity=".65"/>
+                        <path d="M14,14 Q18,5 22,14" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".7"/>
+                        <path d="M34,14 Q38,3 42,14" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".5"/>
+                        <path d="M54,14 Q58,5 62,14" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity=".7"/>
+                    </svg>
+                </div>
+                <p class="text-center text-[10px] text-slate-600 font-mono mt-2">Electric Motor · Zone A</p>
+            </div>
+        </article>
+
+        <!--
+            Nano Banana prompt (SENSOR_2):
+              "industrial roller bearing assembly technical diagram,
+               cyan electric glow, dark steel cutaway view,
+               no text labels, bold flat vector style"
+        -->
+        <article id="card-SENSOR_2"
+            onclick="filterSensor('SENSOR_2')"
+            onkeydown="if(event.key==='Enter'||event.key===' ')filterSensor('SENSOR_2')"
+            tabindex="0" role="listitem"
+            aria-label="SENSOR_2, Zone B Bearing Temperature – click to filter"
+            class="card-s2 cursor-pointer bg-slate-900 rounded-2xl border border-slate-700
+                   hover:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500
+                   transition-all duration-200 shadow-xl overflow-hidden group">
+            <div class="h-1 bg-gradient-to-r from-cyan-500 to-teal-300"></div>
+            <div class="p-5">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span id="dot-SENSOR_2" class="animate-dot-blink w-2 h-2 rounded-full bg-green-400" style="animation-delay:.4s"></span>
+                            <span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Zone B</span>
+                        </div>
+                        <h2 class="text-lg font-black font-mono text-white">SENSOR_2</h2>
+                        <p class="text-cyan-400/80 text-xs mt-0.5">Bearing Temperature</p>
+                    </div>
+                    <div id="badge-SENSOR_2" hidden
+                         class="bg-red-500 text-white font-black rounded-full h-8 w-8 flex items-center justify-center text-xs"
+                         aria-live="polite" aria-label="anomaly count">0</div>
+                </div>
+                <!-- Nano Banana SVG fallback · Bearing -->
+                <div class="flex justify-center py-1 opacity-75 group-hover:opacity-100 transition-opacity">
+                    <svg viewBox="0 0 100 72" width="100" height="72" aria-hidden="true">
+                        <circle cx="50" cy="38" r="30" fill="#0f172a" stroke="#06b6d4" stroke-width="1.5"/>
+                        <circle cx="50" cy="38" r="20" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".5"/>
+                        <circle cx="50" cy="38" r="8"  fill="#06b6d4" opacity=".2"/>
+                        <circle cx="50" cy="38" r="4"  fill="#06b6d4"/>
+                        <circle cx="50" cy="10" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                        <circle cx="50" cy="66" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                        <circle cx="22" cy="38" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                        <circle cx="78" cy="38" r="5" fill="none" stroke="#06b6d4" stroke-width="1.5"/>
+                        <circle cx="29" cy="17" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                        <circle cx="71" cy="17" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                        <circle cx="29" cy="59" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                        <circle cx="71" cy="59" r="4" fill="none" stroke="#06b6d4" stroke-width="1" opacity=".6"/>
+                        <circle cx="50" cy="38" r="35" fill="none" stroke="#06b6d4" stroke-width=".5" stroke-dasharray="3 5" opacity=".3"/>
+                    </svg>
+                </div>
+                <p class="text-center text-[10px] text-slate-600 font-mono mt-2">Roller Bearing · Zone B</p>
+            </div>
+        </article>
+
+        <!--
+            Nano Banana prompt (SENSOR_3):
+              "industrial exhaust stack with heat plumes, temperature gauge,
+               deep orange-red infrared glow, dark environment,
+               no text labels, bold flat vector style"
+        -->
+        <article id="card-SENSOR_3"
+            onclick="filterSensor('SENSOR_3')"
+            onkeydown="if(event.key==='Enter'||event.key===' ')filterSensor('SENSOR_3')"
+            tabindex="0" role="listitem"
+            aria-label="SENSOR_3, Zone C Exhaust Temperature – click to filter"
+            class="card-s3 cursor-pointer bg-slate-900 rounded-2xl border border-slate-700
+                   hover:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500
+                   transition-all duration-200 shadow-xl overflow-hidden group">
+            <div class="h-1 bg-gradient-to-r from-orange-500 to-red-400"></div>
+            <div class="p-5">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span id="dot-SENSOR_3" class="animate-dot-blink w-2 h-2 rounded-full bg-green-400" style="animation-delay:.8s"></span>
+                            <span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Zone C</span>
+                        </div>
+                        <h2 class="text-lg font-black font-mono text-white">SENSOR_3</h2>
+                        <p class="text-orange-400/80 text-xs mt-0.5">Exhaust Temperature</p>
+                    </div>
+                    <div id="badge-SENSOR_3" hidden
+                         class="bg-red-500 text-white font-black rounded-full h-8 w-8 flex items-center justify-center text-xs"
+                         aria-live="polite" aria-label="anomaly count">0</div>
+                </div>
+                <!-- Nano Banana SVG fallback · Exhaust -->
+                <div class="flex justify-center py-1 opacity-75 group-hover:opacity-100 transition-opacity">
+                    <svg viewBox="0 0 100 72" width="100" height="72" aria-hidden="true">
+                        <rect x="36" y="32" width="24" height="40" rx="4" fill="#0f172a" stroke="#f97316" stroke-width="1.5"/>
+                        <rect x="24" y="42" width="48" height="12" rx="3" fill="#1e293b" stroke="#f97316"/>
+                        <rect x="39" y="38" width="7" height="30" rx="2" fill="#f97316" opacity=".25"/>
+                        <rect x="39" y="52" width="7" height="16" rx="2" fill="#f97316" opacity=".8"/>
+                        <circle cx="48" cy="24" r="9"  fill="#f97316" opacity=".1"/>
+                        <circle cx="40" cy="14" r="7"  fill="#f97316" opacity=".08"/>
+                        <circle cx="57" cy="9"  r="6"  fill="#f97316" opacity=".06"/>
+                        <path d="M42,32 Q46,24 50,32" stroke="#f97316" stroke-width="1.5" fill="none" opacity=".65"/>
+                        <path d="M50,22 Q54,14 58,22" stroke="#f97316" stroke-width="1.5" fill="none" opacity=".4"/>
+                        <circle cx="68" cy="54" r="8" fill="none" stroke="#f97316" stroke-width="1.5"/>
+                        <line x1="68" y1="47" x2="68" y2="54" stroke="#f97316" stroke-width="1.5"/>
+                        <line x1="68" y1="54" x2="73" y2="58" stroke="#f97316" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <p class="text-center text-[10px] text-slate-600 font-mono mt-2">Exhaust Stack · Zone C</p>
+            </div>
+        </article>
+    </div>
+
+    <!-- AI Reports Feed -->
+    <section class="bg-slate-900 rounded-2xl border border-slate-700 shadow-xl overflow-hidden"
+             aria-labelledby="feed-title">
+        <!-- Feed toolbar -->
+        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950">
+            <div class="flex items-center gap-2 min-w-0">
+                <svg id="spinner" class="animate-spin-feed w-4 h-4 text-cyan-500 hidden shrink-0"
+                     viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity=".2"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <h2 id="feed-title" class="font-bold text-white text-sm sm:text-base truncate">All AI Diagnostic Reports</h2>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <span id="last-updated" class="text-[11px] text-slate-600 font-mono hidden sm:inline"></span>
+                <button onclick="filterSensor('ALL')"
+                        class="text-xs text-cyan-400 hover:text-cyan-300 border border-slate-700
+                               hover:border-cyan-700 px-3 py-1.5 rounded-lg transition-colors font-mono"
+                        aria-label="Clear filter and show all sensors">
+                    Show All
+                </button>
+            </div>
+        </div>
+        <!-- Feed body -->
+        <div id="reports-container"
+             class="p-4 sm:p-6 space-y-4 max-h-[400px] sm:max-h-[600px] overflow-y-auto"
+             aria-live="polite" aria-label="AI diagnostic reports">
+            <p class="text-slate-500 italic text-sm">Loading reports…</p>
+        </div>
+    </section>
+</main>
+
+<script>
+    let allAnomalies  = [];
+    let currentFilter = 'ALL';
+    let prevCounts    = { SENSOR_1: 0, SENSOR_2: 0, SENSOR_3: 0 };
+    let lastFetch     = null;
+
+    // ── Relative time ───────────────────────────────────
+    function timeAgo(d) {
+        const s = Math.floor((Date.now() - d) / 1000);
+        if (s < 10)   return 'just now';
+        if (s < 60)   return `${s}s ago`;
+        if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+        return new Date(d).toLocaleTimeString();
+    }
+
+    // ── Severity from ML reason ──────────────────────────
+    function severity(a) {
+        const r = (a.ml_reason || '').toLowerCase();
+        if (/critical|severe|high/.test(r))  return 'critical';
+        if (/warn|moderate/.test(r))          return 'warning';
+        return 'alert';
+    }
+    const SEVERITY_CHIP = {
+        critical: `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-red-900/60 text-red-300 border border-red-700/60">● CRITICAL</span>`,
+        warning:  `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-900/60 text-amber-300 border border-amber-700/60">▲ WARNING</span>`,
+        alert:    `<span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-600">◆ ALERT</span>`,
+    };
+    const SENSOR_BORDER = {
+        SENSOR_1: 'border-amber-500',
+        SENSOR_2: 'border-cyan-500',
+        SENSOR_3: 'border-orange-500',
+    };
+
+    // ── Fetch ────────────────────────────────────────────
+    async function fetchAnomalies() {
+        document.getElementById('spinner').classList.remove('hidden');
+        try {
+            const r = await fetch('/api/anomalies');
+            allAnomalies = await r.json();
+            lastFetch = Date.now();
+            updateBadges();
+            renderReports(currentFilter);
+            document.getElementById('kpi-total').textContent = allAnomalies.length || '0';
+            document.getElementById('kpi-time').textContent  =
+                new Date(lastFetch).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('last-updated').textContent = 'just now';
+        } catch (e) {
+            console.error('Fetch error:', e);
+        } finally {
+            document.getElementById('spinner').classList.add('hidden');
+        }
+    }
+
+    // ── Badges ───────────────────────────────────────────
+    function updateBadges() {
+        const counts = { SENSOR_1: 0, SENSOR_2: 0, SENSOR_3: 0 };
+        allAnomalies.forEach(a => { if (a.sensor_id in counts) counts[a.sensor_id]++; });
+
+        for (const [id, n] of Object.entries(counts)) {
+            const badge = document.getElementById(`badge-${id}`);
+            const dot   = document.getElementById(`dot-${id}`);
+            if (n > 0) {
+                badge.textContent = n;
+                badge.hidden = false;
+                if (n !== prevCounts[id]) {
+                    badge.classList.remove('animate-badge-pop');
+                    void badge.offsetWidth; // force reflow to restart animation
+                    badge.classList.add('animate-badge-pop');
+                }
+                dot.classList.replace('bg-green-400', 'bg-red-400');
+            } else {
+                badge.hidden = true;
+                dot.classList.replace('bg-red-400', 'bg-green-400');
+            }
+            prevCounts[id] = n;
+        }
+    }
+
+    // ── Filter ───────────────────────────────────────────
+    function filterSensor(id) {
+        currentFilter = id;
+
+        ['SENSOR_1', 'SENSOR_2', 'SENSOR_3'].forEach(s => {
+            document.getElementById(`card-${s}`)
+                .classList.remove('ring-2', 'ring-amber-500', 'ring-cyan-500', 'ring-orange-500');
+        });
+
+        if (id !== 'ALL') {
+            const ringMap = { SENSOR_1: 'ring-amber-500', SENSOR_2: 'ring-cyan-500', SENSOR_3: 'ring-orange-500' };
+            document.getElementById(`card-${id}`).classList.add('ring-2', ringMap[id]);
+            document.getElementById('feed-title').textContent = `AI Reports · ${id}`;
+        } else {
+            document.getElementById('feed-title').textContent = 'All AI Diagnostic Reports';
+        }
+        renderReports(id);
+    }
+
+    // ── Render reports ───────────────────────────────────
+    function renderReports(filter) {
+        const container = document.getElementById('reports-container');
+        container.innerHTML = '';
+
+        const list = filter === 'ALL'
+            ? allAnomalies
+            : allAnomalies.filter(a => a.sensor_id === filter);
+
+        if (!list.length) {
+            container.innerHTML = `
+                <div class="animate-fade-in flex flex-col items-center py-14 text-center">
+                    <svg viewBox="0 0 48 48" width="52" height="52" class="mb-4" aria-hidden="true">
+                        <circle cx="24" cy="24" r="22" fill="#14532d" stroke="#22c55e" stroke-width="1.5"/>
+                        <polyline points="13,24 21,32 35,16"
+                            stroke="#22c55e" stroke-width="3" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p class="text-green-400 font-bold text-lg">System Healthy</p>
+                    <p class="text-slate-500 text-sm mt-1">
+                        ${filter === 'ALL'
+                            ? 'No anomalies detected across all sensors'
+                            : `No anomalies detected for ${filter}`}
+                    </p>
+                </div>`;
+            return;
+        }
+
+        list.forEach((a, i) => {
+            const ts     = new Date(a.timestamp);
+            const sev    = severity(a);
+            const border = SENSOR_BORDER[a.sensor_id] || 'border-slate-600';
+
+            const el = document.createElement('article');
+            el.className = `report-enter bg-slate-800 rounded-xl border-l-4 ${border}`;
+            el.style.animationDelay = `${Math.min(i * 35, 350)}ms`;
+            el.innerHTML = `
+                <div class="p-4">
+                    <div class="flex justify-between items-start mb-3 flex-wrap gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-300">${a.sensor_id}</span>
+                            ${SEVERITY_CHIP[sev]}
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="text-slate-400 text-xs font-mono">${timeAgo(ts)}</div>
+                            <div class="text-slate-600 text-[11px] mt-0.5">${ts.toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <p class="text-sm text-slate-300 mb-3">
+                        <span class="text-amber-400 font-semibold">Vertex ML:</span>
+                        <span class="font-mono">${a.ml_reason}</span>
+                    </p>
+                    <div class="bg-slate-950 rounded-lg p-3 border border-slate-800">
+                        <div class="text-cyan-400 text-[11px] font-mono font-bold uppercase tracking-widest mb-2">CrewAI Agent Diagnosis</div>
+                        <div class="text-slate-300 text-sm leading-relaxed">${a.ai_report}</div>
+                    </div>
+                </div>`;
+            container.appendChild(el);
+        });
+    }
+
+    // Refresh relative timestamp label every 15s
+    setInterval(() => {
+        if (lastFetch) document.getElementById('last-updated').textContent = timeAgo(lastFetch);
+    }, 15000);
+
+    fetchAnomalies();
+    setInterval(fetchAnomalies, 5000);
+</script>
+</body>
+</html>

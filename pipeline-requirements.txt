@@ -1,0 +1,4 @@
+# Dependencies installed on Dataflow workers only.
+# Keep this minimal — do NOT add API server or agent packages here.
+apache-beam[gcp]
+google-cloud-aiplatform

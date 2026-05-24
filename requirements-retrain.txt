@@ -1,0 +1,13 @@
+# Minimal, pinned dependencies for the ml.retrain container only.
+# Keeping this focused avoids expensive dependency backtracking in Cloud Build.
+
+google-cloud-bigquery==3.25.0
+google-cloud-storage==2.18.2
+google-cloud-aiplatform==1.71.1
+db-dtypes==1.3.1
+pyarrow==17.0.0
+
+scikit-learn==1.5.2
+pandas==2.2.2
+joblib==1.4.2
+python-dotenv==1.0.1
